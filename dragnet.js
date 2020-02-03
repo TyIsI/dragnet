@@ -56,7 +56,11 @@ class DragnetServer {
           ...defaultHeaders,
           ...headers
         }, ...args),
-      end: (...args) => stream.end(...args)
+      end: (...args) => stream.end(...args),
+      respondWithFile: (path, headers = {}, options) => stream.respondWithFile(path, {
+        ...defaultHeaders,
+        ...headers
+      }, options)
     };
     
     let handled = false;
