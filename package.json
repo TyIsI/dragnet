@@ -1,0 +1,27 @@
+{
+  "name": "dragnet",
+  "version": "0.0.1",
+  "description": "HTTP2 stream server",
+  "main": "index.js",
+  "scripts": {
+    "test": "node test.js && echo pass"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/laftho/dragnet.git"
+  },
+  "keywords": [
+    "HTTP2",
+    "streams",
+    "web",
+    "server",
+    "web",
+    "sockets"
+  ],
+  "author": "Thomas LaFreniere",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/laftho/dragnet/issues"
+  },
+  "homepage": "https://github.com/laftho/dragnet#readme"
+}
