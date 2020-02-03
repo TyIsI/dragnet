@@ -9,9 +9,9 @@ describe("index.js", () => {
   });
   
   it("should create instance of DragnetServer", async () => {
-    const { cert, privkey } = await createTestCerts();
+    const certs = await createTestCerts();
 
-    const server = dragnet({ cert: cert, privkey: privkey });
+    const server = dragnet(certs);
 
     assert.ok(server instanceof DragnetServer, "dragnet() from index.js does not create DragnetServer instance");
   });

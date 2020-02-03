@@ -17,9 +17,9 @@ class DragnetServer {
       throw new Error("public certificate pem required");
     }
     
-    const privkey = options.privkey || (options.privkeyfile ? fs.readFileSync(options.privkeyfile) : null);
+    const key = options.key || (options.keyfile ? fs.readFileSync(options.keyfile) : null);
     
-    if (!privkey) {
+    if (!key) {
       throw new Error("certificate private key pem required");
     }
     
@@ -31,7 +31,7 @@ class DragnetServer {
     
     this.server = http2.createSecureServer({
       cert: cert,
-      key: privkey
+      key: key
     });
     
     this.server.on("error", this.handleError.bind(this));
@@ -52,6 +52,7 @@ class DragnetServer {
     const defaultHeaders = this.defaultHeaders;
     
     const synthStream = {
+      $stream: stream,
       respond: (headers, ...args) => stream.respond({
           ...defaultHeaders,
           ...headers

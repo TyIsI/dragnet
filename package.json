@@ -4,7 +4,7 @@
   "description": "HTTP2 stream server",
   "main": "index.js",
   "scripts": {
-    "test": "node test.js && echo pass"
+    "test": "node test.js"
   },
   "repository": {
     "type": "git",

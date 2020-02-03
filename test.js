@@ -1,9 +1,17 @@
 const fs = require("fs");
 const assert = require("assert");
 
-const files = fs.readdirSync(".");
+function getTests() {
+  if (process.argv.length > 2) {
+    return process.argv.slice(2);
+  }
 
-const tests = files.filter(file => file.endsWith(".test.js"));
+  const files = fs.readdirSync(".");
+
+  return files.filter(file => file.endsWith(".test.js"));
+}
+
+const tests = getTests();
 
 (async function test() {
   let pass = true;
