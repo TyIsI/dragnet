@@ -3,8 +3,8 @@ const createTestCerts = require("./test-certs.js");
 const request = require("./test-client.js");
 
 
-const dragnet = require("./index.js");
-const Static = require("./static.js");
+const dragnet = require("../index.js");
+const Static = require("../static.js");
 
 describe("static", () => {
   it("should serve static files", async () => {

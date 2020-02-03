@@ -1,7 +1,7 @@
 const assert = require("assert");
 const createTestCerts = require("./test-certs.js");
-const DragnetServer = require("./dragnet.js");
-const dragnet = require("./index.js");
+const DragnetServer = require("../dragnet.js");
+const dragnet = require("../index.js");
 
 describe("index.js", () => {
   it("should export creation function", () => {

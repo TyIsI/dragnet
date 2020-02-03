@@ -10,10 +10,10 @@ const {
 } = http2.constants;
 
 
-const version = require("./version.js");
+const version = require("../version.js");
 
-const dragnet = require("./index.js");
-const Router = require("./router.js");
+const dragnet = require("../index.js");
+const Router = require("../router.js");
 
 describe("router.js[proxy]", async () => {
   const certs = await createTestCerts();

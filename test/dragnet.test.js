@@ -9,10 +9,10 @@ const {
 } = http2.constants;
 
 
-const version = require("./version.js");
+const version = require("../version.js");
 
-const DragnetServer = require("./dragnet.js");
-const Router = require("./router.js");
+const DragnetServer = require("../dragnet.js");
+const Router = require("../router.js");
 
 describe("dragnet.js", async () => {
   const certs = await createTestCerts();
