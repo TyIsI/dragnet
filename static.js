@@ -54,7 +54,7 @@ class Static {
     }
   }
   
-  handle(stream, headers, flags) {
+  stream(stream, headers, flags) {
     if (!headers || !headers[HTTP2_HEADER_METHOD] || !headers[HTTP2_HEADER_PATH]) {
       return false;
     }

@@ -91,6 +91,7 @@ class Router {
   constructor() {
     this.routes = {};
     this.proxies = new PathResolver();
+    this.protocols = new PathResolver();
   }
   
   use(method, path, handler) {
@@ -100,8 +101,24 @@ class Router {
     
     this.routes[method].add(path, handler);
   }
+
+  protocol(request, socket) {
+    const protocol = this.protocols.match(request.path);
+
+    if (protocol) {
+      protocol.handler.upgrade(request, socket, protocol.matches);
+
+      return true;
+    }
+
+    return false;
+  }
+
+  upgrade(path, protocol) {
+    this.protocols.add(path, protocol);
+  }
   
-  handle(stream, headers, flags) {
+  stream(stream, headers, flags) {
     if (!this.routes || !headers || !headers[HTTP2_HEADER_METHOD] || !headers[HTTP2_HEADER_PATH]) {
       return false;
     }

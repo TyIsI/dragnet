@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <script>
+        let socket = null;
+
+        function connect() {
+          socket = new WebSocket("wss://localhost:8443/ws");
+
+          socket.addEventListener("open", event => {
+            const list = document.getElementById("items");
+
+            while (list.firstChild) {
+              list.removeChild(list.firstChild);
+            }
+
+            socket.send("hello");
+          });
+
+          socket.addEventListener("message", event => {
+            const list = document.getElementById("items");
+
+            const li = document.createElement("li");
+            li.innerText = event.data;
+
+            list.appendChild(li);
+          });
+        }
+
+        function disconnect() {
+          if (socket) {
+            socket.close();
+          }
+
+          const list = document.getElementById("items");
+          const li = document.createElement("li");
+
+          li.innerText = "Not Connected";
+
+          while (list.firstChild) {
+            list.removeChild(list.firstChild);
+          }
+
+          list.appendChild(li);
+        }
+
+        function init() {
+          disconnect();
+
+          const button = document.getElementById("connect");
+
+          button.addEventListener("click", () => {
+            if (!socket) {
+              connect();
+              button.innerText = "Disconnect";
+            } else {
+              disconnect();
+              button.innerText = "Connect";
+            }
+          });
+
+          const send = document.getElementById("send");
+          send.addEventListener("click", () => {
+            if (!socket) {
+              return;
+            }
+
+            const value = document.getElementById("message").value;
+
+            socket.send(value);
+          });
+        }
+    </script>
+</head>
+<body onload="init()">
+hello
+<button id="connect">Connect</button>
+<input type="text" id="message" /><button id="send">Send</button>
+<ul id="items">
+</ul>
+</body>
+</html>

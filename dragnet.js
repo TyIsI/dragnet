@@ -9,6 +9,8 @@ const {
   HTTP2_HEADER_CONTENT_TYPE
 } = http2.constants;
 
+const unquote = v => v.startsWith("'") ? v.slice(1, -1) : v;
+
 class DragnetServer {
   constructor(options = {}) {
     const cert = options.cert || (options.certfile ? fs.readFileSync(options.certfile) : null);
@@ -36,12 +38,65 @@ class DragnetServer {
     
     this.server.on("error", this.handleError.bind(this));
     this.server.on("stream", this.handleStream.bind(this));
-    
+    this.server.on("unknownProtocol", this.handleUnknownProtocol.bind(this));
+
     this.middlewares = [];
   }
   
   handleError(err) {
     console.error(err);
+  }
+
+  handleUnknownProtocol(socket) {
+    socket.once("data", data => {
+      const msg = data.toString("utf8");
+      if (!msg.endsWith("\r\n\r\n")) {
+        return;
+      }
+
+      const lines = msg.split("\r\n").filter(v => v);
+
+      if (lines.length < 4) {
+        return;
+      }
+
+      const parts = lines[0].split(" ");
+      const method = parts[0];
+      const path = parts[1];
+      const protocol = parts[2];
+
+      const headers = lines.slice(1).map(header => header.split(": "))
+        .reduce((h, kv) => ({
+          ...h,
+          [unquote(kv[0]).toLowerCase()]: unquote(kv[1])
+        }), {});
+
+      const isUpgrade = headers.connection && headers.connection.toLowerCase() === "upgrade";
+
+      if (!isUpgrade) {
+        return;
+      }
+
+      if (!headers.upgrade) {
+        return;
+      }
+
+      const request = {
+        method: method,
+        path: path,
+        protocol: protocol,
+        headers: headers
+      };
+
+      let handled = false;
+      for (let middleware of this.middlewares) {
+        if (handled) break;
+
+        if (middleware.protocol) {
+          handled = middleware.protocol(request, socket);
+        }
+      }
+    });
   }
   
   use(middleware) {
@@ -68,7 +123,9 @@ class DragnetServer {
     for (let middleware of this.middlewares) {
       if (handled) break;
 
-      handled = middleware.handle(synthStream, headers, flags);
+      if (middleware.stream) {
+        handled = middleware.stream(synthStream, headers, flags);
+      }
     }
     
     if (handled) {
