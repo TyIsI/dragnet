@@ -47,6 +47,10 @@ const createTestCerts = require("./test-certs.js");
 
       session.text(`server2: ${message}`);
     });
+
+    session.on("close", (me) => {
+      console.log("goodbye " + me.id);
+    });
   });
 
   router.upgrade("/ws", websocket);

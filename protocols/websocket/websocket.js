@@ -60,18 +60,20 @@ class Websocket extends Protocol {
     }
 
     if (opcode === OPCODE_TEXT_FRAME) {
-      return decoded.toString("utf8");
+      return {
+        opcode: opcode,
+        message: decoded.toString("utf8")
+      };
     }
 
-    if (opcode === OPCODE_BINARY_FRAME) {
-      return decoded;
-    }
-
-    throw new Error("Unsupported opcode");
+    return {
+      opcode: opcode,
+      message: decoded
+    };
   }
 
-  encodeFrame(message) {
-    const messageBuf = Buffer.from(message, "utf8");
+  encodeFrame(opcode, message = "", status) {
+    const messageBuf = opcode === OPCODE_BINARY_FRAME ? Buffer.from(message) : Buffer.from(message, "utf8");
 
     let size = 2;
     let cursor = 0;
@@ -90,7 +92,7 @@ class Websocket extends Protocol {
 
     const headerBuf = Buffer.alloc(size);
 
-    headerBuf.writeUInt8(0x81, cursor++);
+    headerBuf.writeUInt8(0x80 | opcode, cursor++);
 
     if (is64) {
       headerBuf.writeUInt8(127, cursor++);
@@ -100,6 +102,15 @@ class Websocket extends Protocol {
       headerBuf.writeUInt16LE(messageLen, cursor);
     } else {
       headerBuf.writeUInt8(messageLen, cursor);
+    }
+
+    if (opcode === OPCODE_CONNECTION_CLOSE && (status || message)) {
+      const code = status || STATUS_NORMAL_CLOSURE;
+
+      const statusBuf = Buffer.alloc(2);
+      statusBuf.writeUInt16LE(code, 0);
+
+      return Buffer.concat([headerBuf, statusBuf, messageBuf]);
     }
 
     return Buffer.concat([headerBuf, messageBuf]);

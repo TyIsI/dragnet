@@ -25,6 +25,19 @@
 
             list.appendChild(li);
           });
+
+          socket.addEventListener("close", event => {
+            const list = document.getElementById("items");
+
+            while (list.firstChild) {
+              list.removeChild(list.firstChild);
+            }
+
+            const li = document.createElement("li");
+            li.innerText = "Disconnected";
+
+            list.appendChild(li);
+          });
         }
 
         function disconnect() {

@@ -69,6 +69,13 @@ class Proxy {
         url = dest.url;
         requestHeaders = dest.headers;
       }
+    } else {
+      const protocolIndex = url.indexOf("://") + 3;
+      const hostEndIndex = url.indexOf("/", protocolIndex);
+      requestHeaders = {
+        ...requestHeaders,
+        host: url.substring(protocolIndex, hostEndIndex)
+      };
     }
 
     return {
