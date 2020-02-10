@@ -59,12 +59,15 @@ class Websocket extends Protocol {
       decoded[i] = maskedData[i] ^ mask[i%4];
     }
 
-    // text
-    if (opcode === 1) {
+    if (opcode === OPCODE_TEXT_FRAME) {
       return decoded.toString("utf8");
     }
 
-    return decoded;
+    if (opcode === OPCODE_BINARY_FRAME) {
+      return decoded;
+    }
+
+    throw new Error("Unsupported opcode");
   }
 
   encodeFrame(message) {

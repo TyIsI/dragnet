@@ -12,7 +12,7 @@ describe("static", () => {
     
     const server = dragnet(certs);
     
-    server.use(new Static("."));
+    server.use(new Static({ path: "." }));
     
     await server.listen(8443);
     

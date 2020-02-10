@@ -44,10 +44,12 @@ function contentType(file) {
 }
 
 class Static {
-  constructor(path) {
-    this.base = path;
+  constructor({ path = ".", base, index = "index.html" } = {}) {
+    this.base = base;
+    this.path = $path.resolve(path);
+    this.index = index;
     
-    const stats = fs.statSync(this.base);
+    const stats = fs.statSync(this.path);
     
     if (!stats.isDirectory()) {
       throw new Error("static path must be a directory");
@@ -64,9 +66,19 @@ class Static {
       return false;
     }
     
-    const path = headers[HTTP2_HEADER_PATH];
+    let path = headers[HTTP2_HEADER_PATH];
+
+    if (this.base && !path.startsWith(this.base)) {
+      return false;
+    }
+
+    if (this.index && path.endsWith("/")) {
+      path += this.index;
+    }
+
+    path = $path.normalize(`/${path}`);
     
-    const file = $path.resolve(this.base, `./${path}`);
+    const file = $path.resolve(this.path, `./${path}`);
     
     try {
       const stat = fs.statSync(file);
