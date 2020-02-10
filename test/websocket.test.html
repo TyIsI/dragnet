@@ -5,7 +5,7 @@
         let socket = null;
 
         function connect() {
-          socket = new WebSocket("wss://localhost:8443/ws");
+          socket = new WebSocket("wss://localhost:8443/ws2");
 
           socket.addEventListener("open", event => {
             const list = document.getElementById("items");

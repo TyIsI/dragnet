@@ -18,7 +18,10 @@ const createTestCerts = require("./test-certs.js");
     }
   });
 
+  const server2 = dragnet(certs);
+
   const router = new Router();
+  const router2 = new Router();
 
   router.get("/", stream => {
     stream.respondWithFile("./websocket.test.html", {
@@ -28,19 +31,32 @@ const createTestCerts = require("./test-certs.js");
   });
 
   const websocket = new Websocket();
+  const websocket2 = new Websocket();
 
   websocket.on("session", session => {
     session.on("text", message => {
-      console.log(message);
+      console.log(`server1: ${message}`);
 
-      session.text(`reply: ${message}`);
+      session.text(`server1: ${message}`);
+    });
+  });
+
+  websocket2.on("session", session => {
+    session.on("text", message => {
+      console.log(`server2: ${message}`);
+
+      session.text(`server2: ${message}`);
     });
   });
 
   router.upgrade("/ws", websocket);
+  router2.upgrade("/", websocket2);
+
+  router.proxy("/ws2", "https://localhost:8444/", { ca: certs.cert });
 
   server.use(router);
+  server2.use(router2);
 
   server.listen(8443);
+  server2.listen(8444);
 })();
-

@@ -6,6 +6,9 @@ const {
   HTTP2_HEADER_CONTENT_TYPE
 } = http2.constants;
 
+const http = require("http");
+const https = require("https");
+
 class PathResolver {
   constructor() {
     this.patterns = {};
@@ -48,12 +51,17 @@ class PathResolver {
   }
 }
 
-function createProxyHandler(destination, options) {
-  return function proxyHandler(stream, headers, flags, matches) {
-    let url = destination;
+class Proxy {
+  constructor(destination, options) {
+    this.destination = destination;
+    this.options = options;
+  }
+
+  resolve(headers, matches) {
+    let url = this.destination;
     let requestHeaders = headers;
-    if (typeof destination === "function") {
-      const dest = destination(headers, matches);
+    if (typeof this.destination === "function") {
+      const dest = this.destination(headers, matches);
 
       if (typeof dest === "string") {
         url = dest;
@@ -63,7 +71,76 @@ function createProxyHandler(destination, options) {
       }
     }
 
-    const client = http2.connect(url, options);
+    return {
+      url: url,
+      headers: requestHeaders
+    };
+  }
+
+  upgrade(request, socket, matches) {
+    const {
+      url,
+      headers: requestHeaders
+    } = this.resolve(request.headers, matches);
+
+
+    let client = https;
+
+    if (url.startsWith("http://") || url.startsWith("ws://")) {
+      client = http;
+    }
+
+    const req = client.request(url, {
+      method: request.method,
+      headers: {
+        ...requestHeaders
+      },
+      ...this.options
+    });
+
+    req.on("response", res => {
+
+      let response = `HTTP${res.httpVersion} ${res.statusCode} ${res.statusMessage}\r\n`;
+
+      response += Object.keys(res.headers).reduce((headers, name) => headers + `${name}: ${res.headers[name]}\r\n`, "");
+
+      response += "\r\n";
+
+      socket.write(response, "utf8");
+
+      response.socket.pipe(socket);
+    });
+
+    req.on("upgrade", (res, $socket, upgradeHead) => {
+      let response = `HTTP${res.httpVersion} ${res.statusCode} ${res.statusMessage}\r\n`;
+
+      response += Object.keys(res.headers).reduce((headers, name) => headers + `${name}: ${res.headers[name]}\r\n`, "");
+
+      response += "\r\n";
+
+      socket.write(response);
+      socket.pipe($socket);
+      $socket.pipe(socket);
+    });
+
+    req.on("error", err => {
+      const resp = "HTTP/1.1 502 Bad Gateway\r\n" +
+        "Connection: close\r\n" +
+        "\r\n";
+
+      socket.end(resp, "utf8");
+    });
+
+    req.end();
+  }
+
+  stream(stream, headers, flags, matches) {
+    const {
+      url,
+      headers: requestHeaders
+    } = this.resolve(headers, matches);
+
+    const client = http2.connect(url, this.options);
 
     client.on("error", err => {
       stream.respond({
@@ -84,7 +161,7 @@ function createProxyHandler(destination, options) {
     request.on("end", () => {
       client.close();
     });
-  };
+  }
 }
 
 class Router {
@@ -103,6 +180,14 @@ class Router {
   }
 
   protocol(request, socket) {
+    const proxy = this.proxies.match(request.path);
+
+    if (proxy) {
+      proxy.handler.upgrade(request, socket, proxy.matches);
+
+      return true;
+    }
+
     const protocol = this.protocols.match(request.path);
 
     if (protocol) {
@@ -129,7 +214,7 @@ class Router {
     const proxy = this.proxies.match(path);
 
     if (proxy) {
-      proxy.handler(stream, headers, flags, proxy.matches);
+      proxy.handler.stream(stream, headers, flags, proxy.matches);
 
       return true;
     }
@@ -150,7 +235,7 @@ class Router {
   }
 
   proxy(path, destination, options) {
-    this.proxies.add(path, createProxyHandler(destination, options));
+    this.proxies.add(path, new Proxy(destination, options));
   }
 }
 
