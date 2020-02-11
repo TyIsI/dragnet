@@ -104,13 +104,20 @@ class Proxy extends EventEmitter {
       client = http;
     }
 
-    const req = client.request(url, {
-      method: request.method,
-      headers: {
-        ...requestHeaders
-      },
-      ...options
-    });
+    let req = null;
+
+    try {
+      req = client.request(url, {
+        method: request.method,
+        headers: {
+          ...requestHeaders
+        },
+        ...options
+      });
+    } catch(e) {
+      this.emit("error", e, this);
+      return;
+    }
 
     req.on("response", res => {
 
@@ -120,9 +127,13 @@ class Proxy extends EventEmitter {
 
       response += "\r\n";
 
-      socket.write(response, "utf8");
+      try {
+        socket.write(response, "utf8");
 
-      response.socket.pipe(socket);
+        response.socket.pipe(socket);
+      } catch(e) {
+        this.emit("error", e, this);
+      }
     });
 
     req.on("upgrade", (res, $socket, upgradeHead) => {
@@ -133,8 +144,12 @@ class Proxy extends EventEmitter {
       response += "\r\n";
 
       socket.write(response, () => {
-        socket.pipe($socket);
-        $socket.pipe(socket);
+        try {
+          socket.pipe($socket);
+          $socket.pipe(socket);
+        } catch(e) {
+          this.emit("error", e, this);
+        }
       });
     });
 
@@ -158,7 +173,14 @@ class Proxy extends EventEmitter {
       options
     } = this.resolve(headers, matches);
 
-    const client = http2.connect(url, options);
+    let client = null;
+
+    try {
+      client = http2.connect(url, options);
+    } catch(e) {
+      this.emit("error", e, this);
+      return;
+    }
 
     client.on("error", err => {
       stream.respond({
@@ -176,7 +198,11 @@ class Proxy extends EventEmitter {
       stream.respond(resHeaders);
     });
 
-    request.pipe(stream.$stream);
+    try {
+      request.pipe(stream.$stream);
+    } catch(e) {
+      this.emit("error", e, this);
+    }
 
     request.on("end", () => {
       client.close();
@@ -205,7 +231,11 @@ class Router extends EventEmitter {
     const proxy = this.proxies.match(request.path);
 
     if (proxy) {
-      proxy.handler.upgrade(request, socket, proxy.matches);
+      try {
+        proxy.handler.upgrade(request, socket, proxy.matches);
+      } catch(e) {
+        this.emit("error", e, this, proxy.handler);
+      }
 
       return true;
     }
@@ -213,7 +243,11 @@ class Router extends EventEmitter {
     const protocol = this.protocols.match(request.path);
 
     if (protocol) {
-      protocol.handler.upgrade(request, socket, protocol.matches);
+      try {
+        protocol.handler.upgrade(request, socket, protocol.matches);
+      } catch(e) {
+        this.emit("error", e, this, protocol.handler);
+      }
 
       return true;
     }
