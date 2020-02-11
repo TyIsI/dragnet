@@ -143,14 +143,18 @@ class Proxy extends EventEmitter {
 
       response += "\r\n";
 
-      socket.write(response, () => {
-        try {
-          socket.pipe($socket);
-          $socket.pipe(socket);
-        } catch(e) {
-          this.emit("error", e, this);
-        }
-      });
+      try {
+        socket.write(response, () => {
+          try {
+            socket.pipe($socket);
+            $socket.pipe(socket);
+          } catch (e) {
+            this.emit("error", e, this);
+          }
+        });
+      } catch(e) {
+        this.emit("error", e, this);
+      }
     });
 
     req.on("error", err => {
@@ -158,12 +162,21 @@ class Proxy extends EventEmitter {
         "Connection: close\r\n" +
         "\r\n";
 
-      socket.end(resp, "utf8");
+      try {
+        socket.end(resp, "utf8");
+      } catch(e) {
+        this.emit("error", e, err, this);
+        return;
+      }
 
       this.emit("error", err, this);
     });
 
-    req.end();
+    try {
+      req.end();
+    } catch(e) {
+      this.emit("error", e, this);
+    }
   }
 
   stream(stream, headers, flags, matches) {
@@ -183,11 +196,17 @@ class Proxy extends EventEmitter {
     }
 
     client.on("error", err => {
-      stream.respond({
-        [HTTP2_HEADER_CONTENT_TYPE]: "text/plain",
-        [HTTP2_HEADER_STATUS]: 502
-      }, { endStream: true });
-      client.close();
+      try {
+        stream.respond({
+          [HTTP2_HEADER_CONTENT_TYPE]: "text/plain",
+          [HTTP2_HEADER_STATUS]: 502
+        }, {endStream: true});
+      } catch(e) {
+        this.emit("error", e, err, this);
+        return;
+      } finally {
+        client.close();
+      }
 
       this.emit("error", err, this);
     });
@@ -195,7 +214,11 @@ class Proxy extends EventEmitter {
     const request = client.request(requestHeaders);
 
     request.on("response", (resHeaders, resFlags) => {
-      stream.respond(resHeaders);
+      try {
+        stream.respond(resHeaders);
+      } catch(e) {
+        this.emit("error", e);
+      }
     });
 
     try {
