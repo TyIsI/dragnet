@@ -19,9 +19,23 @@ const createTestCerts = require("./test-certs.js");
   });
 
   const server2 = dragnet(certs);
+  const server3 = dragnet(certs);
 
   const router = new Router();
   const router2 = new Router();
+  const router3 = new Router();
+
+  router.on("error", (...details) => {
+    console.log("router localhost:8443 error: ", ...details);
+  });
+
+  router2.on("error", (...details) => {
+    console.log("router localhost:8444 error: ", ...details);
+  });
+
+  router3.on("error", (...details) => {
+    console.log("router localhost:8445 error: ", ...details);
+  });
 
   router.get("/", stream => {
     stream.respondWithFile("./websocket.test.html", {
@@ -32,6 +46,7 @@ const createTestCerts = require("./test-certs.js");
 
   const websocket = new Websocket();
   const websocket2 = new Websocket();
+  const websocket3 = new Websocket();
 
   websocket.on("session", session => {
     session.on("text", message => {
@@ -49,18 +64,35 @@ const createTestCerts = require("./test-certs.js");
     });
 
     session.on("close", (me) => {
-      console.log("goodbye " + me.id);
+      console.log("server2 goodbye " + me.id);
+    });
+  });
+
+  websocket3.on("session", session => {
+    session.on("text", message => {
+      console.log(`server3: ${message}`);
+
+      session.text(`server3: ${message}`);
+    });
+
+    session.on("close", (me) => {
+      console.log("server3 goodbye " + me.id);
     });
   });
 
   router.upgrade("/ws", websocket);
   router2.upgrade("/", websocket2);
+  router3.upgrade("/", websocket3);
 
   router.proxy("/ws2", "https://localhost:8444/", { ca: certs.cert });
+  router.proxy("/ws3", "https://localhost:8444/ws3", { ca: certs.cert });
+  router2.proxy("/ws3", "https://localhost:8445/", { ca: certs.cert });
 
   server.use(router);
   server2.use(router2);
+  server3.use(router3);
 
   server.listen(8443);
   server2.listen(8444);
+  server3.listen(8445);
 })();

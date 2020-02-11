@@ -1,3 +1,4 @@
+const EventEmitter = require('events');
 const http2 = require("http2");
 const {
   HTTP2_HEADER_METHOD,
@@ -51,8 +52,9 @@ class PathResolver {
   }
 }
 
-class Proxy {
+class Proxy extends EventEmitter {
   constructor(destination, options = {}) {
+    super();
     this.destination = destination;
     this.options = options;
   }
@@ -96,7 +98,6 @@ class Proxy {
       options
     } = this.resolve(request.headers, matches);
 
-
     let client = https;
 
     if (url.startsWith("http://") || url.startsWith("ws://")) {
@@ -113,7 +114,7 @@ class Proxy {
 
     req.on("response", res => {
 
-      let response = `HTTP${res.httpVersion} ${res.statusCode} ${res.statusMessage}\r\n`;
+      let response = `HTTP/${res.httpVersion} ${res.statusCode} ${res.statusMessage}\r\n`;
 
       response += Object.keys(res.headers).reduce((headers, name) => headers + `${name}: ${res.headers[name]}\r\n`, "");
 
@@ -125,15 +126,16 @@ class Proxy {
     });
 
     req.on("upgrade", (res, $socket, upgradeHead) => {
-      let response = `HTTP${res.httpVersion} ${res.statusCode} ${res.statusMessage}\r\n`;
+      let response = `HTTP/${res.httpVersion} ${res.statusCode} ${res.statusMessage}\r\n`;
 
       response += Object.keys(res.headers).reduce((headers, name) => headers + `${name}: ${res.headers[name]}\r\n`, "");
 
       response += "\r\n";
 
-      socket.write(response);
-      socket.pipe($socket);
-      $socket.pipe(socket);
+      socket.write(response, () => {
+        socket.pipe($socket);
+        $socket.pipe(socket);
+      });
     });
 
     req.on("error", err => {
@@ -142,6 +144,8 @@ class Proxy {
         "\r\n";
 
       socket.end(resp, "utf8");
+
+      this.emit("error", err, this);
     });
 
     req.end();
@@ -162,6 +166,8 @@ class Proxy {
         [HTTP2_HEADER_STATUS]: 502
       }, { endStream: true });
       client.close();
+
+      this.emit("error", err, this);
     });
 
     const request = client.request(requestHeaders);
@@ -178,8 +184,10 @@ class Proxy {
   }
 }
 
-class Router {
-  constructor() {
+class Router extends EventEmitter {
+  constructor(...hosts) {
+    super();
+    this.hosts = hosts; //TODO confine router matches to these hosts
     this.routes = {};
     this.proxies = new PathResolver();
     this.protocols = new PathResolver();
@@ -228,7 +236,11 @@ class Router {
     const proxy = this.proxies.match(path);
 
     if (proxy) {
-      proxy.handler.stream(stream, headers, flags, proxy.matches);
+      try {
+        proxy.handler.stream(stream, headers, flags, proxy.matches);
+      } catch(e) {
+        this.emit("error", e, this, proxy.handler);
+      }
 
       return true;
     }
@@ -243,13 +255,23 @@ class Router {
       return false;
     }
 
-    match.handler(stream, headers, flags, match.matches);
+    try {
+      match.handler(stream, headers, flags, match.matches);
+    } catch(e) {
+      this.emit("error", e, this, match.handler);
+    }
 
     return true;
   }
 
   proxy(path, destination, options) {
-    this.proxies.add(path, new Proxy(destination, options));
+    const proxy = new Proxy(destination, options);
+    proxy.on("error", this.proxyError.bind(this));
+    this.proxies.add(path, proxy);
+  }
+
+  proxyError(err, proxy) {
+    this.emit("error", err, this, proxy);
   }
 }
 
