@@ -6,7 +6,8 @@ const http2 = require("http2");
 const {
   HTTP2_HEADER_STATUS,
   HTTP2_HEADER_CONTENT_TYPE,
-  HTTP2_HEADER_PATH
+  HTTP2_HEADER_PATH,
+  HTTP2_HEADER_HOST
 } = http2.constants;
 
 
@@ -43,9 +44,10 @@ describe("router.js[proxy]", async () => {
       headers: {
         ...headers,
         [HTTP2_HEADER_PATH]: `/${matches[2]}`
-      }
+      },
+      options: { ca: certs.cert }
     }
-  }, { ca: certs.cert });
+  });
 
   router2.get("/", (stream) => {
     stream.respond({

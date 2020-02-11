@@ -52,7 +52,7 @@ class PathResolver {
 }
 
 class Proxy {
-  constructor(destination, options) {
+  constructor(destination, options = {}) {
     this.destination = destination;
     this.options = options;
   }
@@ -60,6 +60,7 @@ class Proxy {
   resolve(headers, matches) {
     let url = this.destination;
     let requestHeaders = headers;
+    let requestOptions = this.options;
     if (typeof this.destination === "function") {
       const dest = this.destination(headers, matches);
 
@@ -68,26 +69,31 @@ class Proxy {
       } else {
         url = dest.url;
         requestHeaders = dest.headers;
+        requestOptions = dest.options || this.options;
       }
     } else {
-      const protocolIndex = url.indexOf("://") + 3;
-      const hostEndIndex = url.indexOf("/", protocolIndex);
-      requestHeaders = {
-        ...requestHeaders,
-        host: url.substring(protocolIndex, hostEndIndex)
-      };
+      if (requestHeaders && requestHeaders.host) {
+        const protocolIndex = url.indexOf("://") + 3;
+        const hostEndIndex = url.indexOf("/", protocolIndex);
+        requestHeaders = {
+          ...requestHeaders,
+          host: url.substring(protocolIndex, hostEndIndex)
+        };
+      }
     }
 
     return {
       url: url,
-      headers: requestHeaders
+      headers: requestHeaders,
+      options: requestOptions
     };
   }
 
   upgrade(request, socket, matches) {
     const {
       url,
-      headers: requestHeaders
+      headers: requestHeaders,
+      options
     } = this.resolve(request.headers, matches);
 
 
@@ -102,7 +108,7 @@ class Proxy {
       headers: {
         ...requestHeaders
       },
-      ...this.options
+      ...options
     });
 
     req.on("response", res => {
@@ -144,10 +150,11 @@ class Proxy {
   stream(stream, headers, flags, matches) {
     const {
       url,
-      headers: requestHeaders
+      headers: requestHeaders,
+      options
     } = this.resolve(headers, matches);
 
-    const client = http2.connect(url, this.options);
+    const client = http2.connect(url, options);
 
     client.on("error", err => {
       stream.respond({
