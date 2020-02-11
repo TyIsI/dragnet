@@ -119,6 +119,10 @@ class Proxy extends EventEmitter {
       return;
     }
 
+    socket.on("error", err => {
+      this.emit("error", err, this);
+    });
+
     req.on("response", res => {
 
       let response = `HTTP/${res.httpVersion} ${res.statusCode} ${res.statusMessage}\r\n`;
@@ -142,6 +146,10 @@ class Proxy extends EventEmitter {
       response += Object.keys(res.headers).reduce((headers, name) => headers + `${name}: ${res.headers[name]}\r\n`, "");
 
       response += "\r\n";
+
+      $socket.on("error", err => {
+        this.emit("error", err, this);
+      });
 
       try {
         socket.write(response, () => {
