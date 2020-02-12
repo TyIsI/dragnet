@@ -22,10 +22,12 @@ class WebsocketSession extends EventEmitter {
     this.socket.on("error", this.error.bind(this));
     this.socket.on("data", this.data.bind(this));
     this.socket.on("close", () => { this.emit("close", this); });
+
+    this.previous = null;
   }
 
-  decodeFrame(data) {
-    return this.protocol.decodeFrame(data);
+  decodeFrame(data, resume) {
+    return this.protocol.decodeFrame(data, resume);
   }
 
   encodeFrame(opcode, message) {
@@ -33,21 +35,29 @@ class WebsocketSession extends EventEmitter {
   }
 
   data(data) {
-    const { opcode, message } = this.decodeFrame(data);
+    const frame = this.decodeFrame(data, this.previous);
+
+    const { opcode, decoded, remaining } = frame;
+    if (remaining > 0) {
+      this.previous = frame;
+      return;
+    } else {
+      this.previous = null;
+    }
 
     if (opcode === OPCODE_TEXT_FRAME) {
-      this.emit("text", message, this);
+      this.emit("text", decoded.toString("utf8"), this);
       return;
     }
 
     if (opcode === OPCODE_BINARY_FRAME) {
-      this.emit("binary", message, this);
+      this.emit("binary", decoded, this);
       return;
     }
 
     if(opcode === OPCODE_PING) {
       this.pong();
-      this.emit("ping", message, this);
+      this.emit("ping", decoded, this);
       return;
     }
 
@@ -56,7 +66,7 @@ class WebsocketSession extends EventEmitter {
       return;
     }
 
-    this.emit("unknown", { opcode, message }, this);
+    this.emit("unknown", frame, this);
   }
 
   error(message) {

@@ -134,7 +134,9 @@ class Proxy extends EventEmitter {
       try {
         socket.write(response, "utf8");
 
-        response.socket.pipe(socket);
+        if (response.socket) {
+          response.socket.pipe(socket);
+        }
       } catch(e) {
         this.emit("error", e, this);
       }

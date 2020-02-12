@@ -23,7 +23,7 @@ class Websocket extends Protocol {
     return this.id++;
   }
 
-  decodeFrame(data) {
+  decodeFrameHeaders(data) {
     let cursor = 0;
     let ctrl = data[cursor++];
 
@@ -38,11 +38,9 @@ class Websocket extends Protocol {
     let len = ctrl & 127;
 
     if (len === 126) {
-      // len = (d[cursor++] << 8) + data[cursor++];
-      len = data.readUInt16LE(cursor);
-      cursor += 2;
+      len = (data[cursor++] << 8) + data[cursor++];
     } else if (len === 127) {
-      len = data.readBigUInt64LE(cursor);
+      len = data.readDoubleLE(cursor);
       cursor += 8;
     }
 
@@ -52,23 +50,38 @@ class Websocket extends Protocol {
       cursor += 4;
     }
 
-    const maskedData = data.slice(cursor, cursor + len);
     const decoded = Buffer.alloc(len);
 
-    for(let i = 0; i < maskedData.length; i++) {
-      decoded[i] = maskedData[i] ^ mask[i%4];
-    }
+    return {
+      len: len,
+      mask: mask,
+      opcode: opcode,
+      cursor: cursor,
+      remaining: len,
+      decoded: decoded,
+      index: 0
+    };
+  }
 
-    if (opcode === OPCODE_TEXT_FRAME) {
-      return {
-        opcode: opcode,
-        message: decoded.toString("utf8")
-      };
+  decodeFrame(data, resume) {
+    const { index, cursor, opcode, len, mask, remaining, decoded } = resume ? resume : this.decodeFrameHeaders(data);
+
+    const maskedData = resume? data : data.slice(cursor, cursor + len);
+
+    let i = 0;
+    for(; i < maskedData.length; i++) {
+      const offset = i + index;
+      decoded[offset] = maskedData[i] ^ mask[offset%4];
     }
 
     return {
+      cursor: cursor,
       opcode: opcode,
-      message: decoded
+      mask: mask,
+      len: len,
+      remaining: remaining - maskedData.length,
+      decoded: decoded,
+      index: i + index
     };
   }
 
@@ -92,16 +105,17 @@ class Websocket extends Protocol {
 
     const headerBuf = Buffer.alloc(size);
 
-    headerBuf.writeUInt8(0x80 | opcode, cursor++);
+    cursor = headerBuf.writeUInt8(0x80 | opcode, cursor);
 
     if (is64) {
-      headerBuf.writeUInt8(127, cursor++);
-      headerBuf.writeBigUInt64LE(BigInt(messageLen), cursor);
+      cursor = headerBuf.writeUInt8(127, cursor);
+      cursor = headerBuf.writeDoubleLE(messageLen, cursor);
     } else if(is16) {
-      headerBuf.writeUInt8(126, cursor++);
-      headerBuf.writeUInt16LE(messageLen, cursor);
-    } else {
-      headerBuf.writeUInt8(messageLen, cursor);
+      cursor = headerBuf.writeUInt8(126, cursor);
+      cursor = headerBuf.writeUInt8((messageLen & 0x0000ff00) >> 8, cursor);
+      cursor = headerBuf.writeUInt8(messageLen & 0x000000ff, cursor);
+    } else if (!is64 && !is16) {
+      cursor = headerBuf.writeUInt8(messageLen, cursor);
     }
 
     if (opcode === OPCODE_CONNECTION_CLOSE && (status || message)) {
