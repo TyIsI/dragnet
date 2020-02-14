@@ -1,6 +1,6 @@
 {
   "name": "dragnet",
-  "version": "0.0.15",
+  "version": "0.0.16",
   "description": "HTTP2 stream server",
   "main": "index.js",
   "scripts": {
