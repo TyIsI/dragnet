@@ -23,14 +23,14 @@ class Websocket extends Protocol {
     return this.id++;
   }
 
-  decodeFrameHeaders(data) {
+  decodeFrame(data) {
     let cursor = 0;
     let ctrl = data[cursor++];
 
-    const fin = Boolean(ctrl & 128); // TODO has more
-    // const rsv1 = Boolean(ctrl & 64);
-    // const rsv2 = Boolean(ctrl & 32);
-    // const rsv3 = Boolean(ctrl & 16);
+    const fin = Boolean(ctrl & 128);
+    const rsv1 = Boolean(ctrl & 64);
+    const rsv2 = Boolean(ctrl & 32);
+    const rsv3 = Boolean(ctrl & 16);
     const opcode = ctrl & 15;
 
     ctrl = data[cursor++];
@@ -40,8 +40,14 @@ class Websocket extends Protocol {
     if (len === 126) {
       len = (data[cursor++] << 8) + data[cursor++];
     } else if (len === 127) {
-      len = data.readDoubleLE(cursor);
-      cursor += 8;
+      len = (data[cursor++] << 56)
+        + (data[cursor++] << 48)
+        + (data[cursor++] << 40)
+        + (data[cursor++] << 32)
+        + (data[cursor++] << 24)
+        + (data[cursor++] << 16)
+        + (data[cursor++] << 8)
+        + data[cursor++];
     }
 
     let mask = null;
@@ -50,39 +56,32 @@ class Websocket extends Protocol {
       cursor += 4;
     }
 
-    const decoded = Buffer.alloc(len);
+    const buffer = data.slice(cursor);
 
     return {
+      fin: fin,
+      rsv1: rsv1,
+      rsv2: rsv2,
+      rsv3: rsv3,
+      opcode: opcode,
       len: len,
       mask: mask,
-      opcode: opcode,
-      cursor: cursor,
-      remaining: len,
-      decoded: decoded,
-      index: 0
+      buffer: buffer
     };
   }
 
-  decodeFrame(data, resume) {
-    const { index, cursor, opcode, len, mask, remaining, decoded } = resume ? resume : this.decodeFrameHeaders(data);
-
-    const maskedData = resume? data : data.slice(cursor, cursor + len);
-
-    let i = 0;
-    for(; i < maskedData.length; i++) {
-      const offset = i + index;
-      decoded[offset] = maskedData[i] ^ mask[offset%4];
+  unmask(data, mask) {
+    if (!mask || mask.length !== 4) {
+      return data;
     }
 
-    return {
-      cursor: cursor,
-      opcode: opcode,
-      mask: mask,
-      len: len,
-      remaining: remaining - maskedData.length,
-      decoded: decoded,
-      index: i + index
-    };
+    const buffer = Buffer.alloc(data.length);
+
+    for(let i = 0; i < data.length; i++) {
+      buffer[i] = data[i] ^ mask[i%4];
+    }
+
+    return buffer;
   }
 
   encodeFrame(opcode, message = "", status) {
@@ -109,7 +108,15 @@ class Websocket extends Protocol {
 
     if (is64) {
       cursor = headerBuf.writeUInt8(127, cursor);
-      cursor = headerBuf.writeDoubleLE(messageLen, cursor);
+
+      cursor = headerBuf.writeUInt8((messageLen & 0xff00000000000000) >> 56, cursor);
+      cursor = headerBuf.writeUInt8((messageLen & 0x00ff000000000000) >> 48, cursor);
+      cursor = headerBuf.writeUInt8((messageLen & 0x0000ff0000000000) >> 40, cursor);
+      cursor = headerBuf.writeUInt8((messageLen & 0x000000ff00000000) >> 32, cursor);
+      cursor = headerBuf.writeUInt8((messageLen & 0x00000000ff000000) >> 24, cursor);
+      cursor = headerBuf.writeUInt8((messageLen & 0x0000000000ff0000) >> 16, cursor);
+      cursor = headerBuf.writeUInt8((messageLen & 0x000000000000ff00) >> 8, cursor);
+      cursor = headerBuf.writeUInt8(messageLen & 0x00000000000000ff, cursor);
     } else if(is16) {
       cursor = headerBuf.writeUInt8(126, cursor);
       cursor = headerBuf.writeUInt8((messageLen & 0x0000ff00) >> 8, cursor);

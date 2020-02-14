@@ -6,7 +6,8 @@ const {
   OPCODE_CONNECTION_CLOSE,
   OPCODE_PING,
   OPCODE_PONG,
-  STATUS_GOING_AWAY
+  STATUS_GOING_AWAY,
+  OPCODE_CONTINUATION_FRAME
 } = require("./constants.js");
 
 class WebsocketSession extends EventEmitter {
@@ -26,6 +27,10 @@ class WebsocketSession extends EventEmitter {
     this.previous = null;
   }
 
+  unmask(data, mask) {
+    return this.protocol.unmask(data, mask);
+  }
+
   decodeFrame(data, resume) {
     return this.protocol.decodeFrame(data, resume);
   }
@@ -35,16 +40,89 @@ class WebsocketSession extends EventEmitter {
   }
 
   data(data) {
-    const frame = this.decodeFrame(data, this.previous);
+    if (this.previous && this.previous.buffer && this.previous.len - this.previous.buffer.length > 0) {
+      this.previous.buffer = Buffer.concat([this.previous.buffer, data]);
 
-    const { opcode, decoded, remaining } = frame;
-    if (remaining > 0) {
-      this.previous = frame;
+      if (this.previous.len - this.previous.buffer.length === 0) {
+        const { fin, buffer, mask, opcode } = this.previous;
+        const decoded = this.unmask(buffer, mask);
+
+        if (fin) {
+          this.previous = null;
+          this.handle(opcode, decoded);
+        } else {
+          this.previous.len = 0;
+          this.previous.buffer = null;
+
+          if (!this.previous.decoded) {
+            this.previous.decoded = decoded;
+          } else {
+            this.previous.decoded = Buffer.concat([this.previous.decoded, decoded]);
+          }
+        }
+      }
+
       return;
-    } else {
-      this.previous = null;
     }
 
+    const frame = this.decodeFrame(data);
+
+    if (frame.len > frame.buffer.length && !this.previous) {
+      this.previous = frame;
+      return;
+    }
+
+    if (frame.opcode === OPCODE_CONTINUATION_FRAME) {
+      if (!this.previous) {
+        return; // discard
+      }
+
+      if (this.previous.buffer && this.previous.len === this.previous.buffer.length) {
+        const { mask, buffer } = this.previous;
+
+        const decoded = this.unmask(buffer, mask);
+
+        this.previous.len = 0;
+        this.previous.buffer = null;
+
+        if (!this.previous.decoded) {
+          this.previous.decoded = decoded;
+        } else {
+          this.previous.decoded = Buffer.concat([this.previous.decoded, decoded]);
+        }
+
+        if (!frame.fin) {
+          this.previous.mask = frame.mask;
+          this.previous.len = frame.len;
+          this.previous.buffer = frame.buffer;
+
+          return;
+        }
+      }
+    }
+
+    if (!frame.fin) {
+      if (!this.previous) {
+        this.previous = frame;
+      }
+
+      this.previous.mask = frame.mask;
+      this.previous.len = frame.len;
+      this.previous.buffer = frame.buffer;
+
+      return;
+    }
+
+    const { opcode } = this.previous || frame;
+
+    const unmasked = this.unmask(frame.buffer, frame.mask);
+
+    const decoded = this.previous && this.previous.decoded ? Buffer.concat([this.previous.decoded, unmasked]) : unmasked;
+
+    this.handle(opcode, decoded);
+  }
+
+  handle(opcode, decoded) {
     if (opcode === OPCODE_TEXT_FRAME) {
       this.emit("text", decoded.toString("utf8"), this);
       return;
@@ -66,7 +144,7 @@ class WebsocketSession extends EventEmitter {
       return;
     }
 
-    this.emit("unknown", frame, this);
+    this.emit("unknown", opcode, decoded, this);
   }
 
   error(message) {
