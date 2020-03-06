@@ -67,7 +67,7 @@ const urlResolver = (headers, matches) => {
     url: "https://localhost:8444",
     headers: {
       ...headers,
-      [HTTP2_HEADER_PATH]: `/${matches[1]`
+      [HTTP2_HEADER_PATH]: `/${matches[1]}`
     }
   };
 };
